@@ -1,0 +1,4 @@
+- [x] 執行 WebView 空白畫面修復
+    - [x] 更新 `DiscordLoginWebView.kt` (JS 偵錯、硬體加速、佈局簡化)
+    - [x] 更新 `MainActivity.kt` (覆蓋層級調整)
+- [ ] 驗證 Logcat 中的 JS 輸出

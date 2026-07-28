@@ -1,0 +1,6 @@
+- [ ] 在 `AuthViewModel` 中實作 403 錯誤的集中解析邏輯 (私有方法)
+- [ ] 修改 `checkAuth(force: Boolean)` 支援繞過節流機制
+- [ ] 在 `NodeViewModel` 捕捉 HttpException 並觸發 `checkAuth(force = true)`
+- [ ] 在 `TunnelViewModel` 捕捉 HttpException 並觸發 `checkAuth(force = true)`
+- [ ] 更新 `LoginScreen` 的登入回調，改為強制檢測帳號狀態
+- [ ] 驗證各項帳號狀態的即時跳轉功能

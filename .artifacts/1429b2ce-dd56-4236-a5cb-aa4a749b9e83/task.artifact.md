@@ -1,0 +1,14 @@
+- [x] 實作主題管理系統
+    - [x] 建立 `ThemeViewModel` 與 DataStore 儲存
+    - [x] 修改 `TaiwamfrpTheme` 支援手動切換
+- [x] 重構網路層 (雙 API 支援)
+    - [x] 建立 `MainApiClient` (api.taiwanfrp.me)
+    - [x] 建立 `DdnsClient` (taiwanfrp.ddns.net)
+- [x] 實作登入頁面優化
+    - [x] 加入 Discord 圖標 (向量繪製)
+    - [x] 加入主題切換與訪客按鈕
+- [x] 實作主頁控制台 (Tunnels & Nodes)
+    - [x] 建立相關 Data Models
+    - [x] 實作列表顯示
+- [x] 優化伺服器狀態頁面 (訪客模式返回)
+- [x] 驗證所有功能

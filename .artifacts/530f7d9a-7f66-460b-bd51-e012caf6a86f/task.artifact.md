@@ -1,0 +1,4 @@
+- `[x]` 更新 DiscordLoginWebView.kt 中的 URL 偵測邏輯
+- `[x]` 實作自動重導向至 /callback 的功能
+- `[x]` 優化 Cookie 捕捉時機以確保完成登入
+- `[ ]` 驗證登入流程與 App 穩定性
