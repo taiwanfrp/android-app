@@ -136,7 +136,10 @@
     <string name="update_available">New Version Available</string>
     <string name="update_new_version">A new version %1$s is available. Update now?</string>
     <string name="update_now">Update Now</string>
+    <string name="update_checking">Checking for updates&#8230;</string>
+    <string name="update_uptodate">App is up to date</string>
     <string name="update_downloading">Downloading update&#8230;</string>
+    <string name="check_update">Check for Update</string>
     <string name="label_tunnel_count">Current Tunnels: %1$d / 3</string>
     <string name="error_remote_port_in_use">This port is already in use</string>
     <string name="random_port">Random Select</string>

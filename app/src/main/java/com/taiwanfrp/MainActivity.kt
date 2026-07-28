@@ -233,7 +233,9 @@ class SettingsViewModel(context: Context) : ViewModel() {
 
 sealed class UpdateState {
     object Idle : UpdateState()
+    object Checking : UpdateState()
     data class NewVersionAvailable(val release: GithubRelease) : UpdateState()
+    object UpToDate : UpdateState()
     object Downloading : UpdateState()
     data class Error(val message: String) : UpdateState()
 }
@@ -242,16 +244,22 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState
 
-    fun checkUpdate(currentVersion: String) {
+    fun checkUpdate(currentVersion: String, manual: Boolean = false) {
         viewModelScope.launch {
+            if (manual) _updateState.value = UpdateState.Checking
             try {
                 val latest = RetrofitClient.updateApi.getLatestRelease()
                 val latestVersion = latest.tagName.removePrefix("v")
                 if (isNewerVersion(currentVersion, latestVersion)) {
                     _updateState.value = UpdateState.NewVersionAvailable(latest)
+                } else if (manual) {
+                    _updateState.value = UpdateState.UpToDate
                 }
             } catch (e: Exception) {
-                // Ignore update check errors
+                if (manual) {
+                    _updateState.value =
+                        UpdateState.Error(e.message ?: "Failed to check for updates")
+                }
             }
         }
     }
@@ -399,7 +407,8 @@ class MainActivity : ComponentActivity() {
                                             nodeViewModel = nodeViewModel,
                                             tunnelViewModel = tunnelViewModel,
                                             authViewModel = authViewModel,
-                                            settingsViewModel = settingsViewModel
+                                            settingsViewModel = settingsViewModel,
+                                            updateViewModel = updateViewModel
                                         )
                                     }
 
@@ -953,7 +962,8 @@ fun MainScreen(
     nodeViewModel: NodeViewModel,
     tunnelViewModel: TunnelViewModel,
     authViewModel: AuthViewModel,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
+    updateViewModel: UpdateViewModel
 ) {
     var selectedItem by remember { mutableStateOf(NavItem.Home) }
     var showProfile by remember { mutableStateOf(false) }
@@ -1042,7 +1052,8 @@ fun MainScreen(
                             settingsViewModel,
                             authViewModel,
                             nodeViewModel,
-                            tunnelViewModel
+                            tunnelViewModel,
+                            updateViewModel
                         )
                     }
                 }
@@ -2424,7 +2435,8 @@ fun OtherScreen(
     settingsViewModel: SettingsViewModel,
     authViewModel: AuthViewModel,
     nodeViewModel: NodeViewModel,
-    tunnelViewModel: TunnelViewModel
+    tunnelViewModel: TunnelViewModel,
+    updateViewModel: UpdateViewModel
 ) {
     val appTheme by settingsViewModel.themeState.collectAsState()
     val appLanguage by settingsViewModel.languageState.collectAsState()
@@ -2584,6 +2596,27 @@ fun OtherScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
+                val versionName = try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                } catch (e: Exception) {
+                    "0.0.0"
+                }
+                updateViewModel.checkUpdate(versionName ?: "0.0.0", manual = true)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        ) {
+            Icon(Icons.Default.Refresh, null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.check_update))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
                 try {
                     val intent = Intent(
                         Intent.ACTION_VIEW,
@@ -2609,7 +2642,7 @@ fun OtherScreen(
 
         Spacer(modifier = Modifier.weight(1f))
         Text(
-            text = stringResource(R.string.version, "V2.4.5"),
+            text = stringResource(R.string.version, "V2.5"),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.secondary
         )
@@ -3509,7 +3542,30 @@ fun EditTunnelDialog(
 
 @Composable
 fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
+    val context = LocalContext.current
     when (state) {
+        UpdateState.Checking -> {
+            Dialog(onDismissRequest = {}) {
+                Card {
+                    Column(
+                        Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.update_checking))
+                    }
+                }
+            }
+        }
+
+        UpdateState.UpToDate -> {
+            LaunchedEffect(Unit) {
+                Toast.makeText(context, R.string.update_uptodate, Toast.LENGTH_SHORT).show()
+                viewModel.dismiss()
+            }
+        }
+
         is UpdateState.NewVersionAvailable -> {
             AlertDialog(
                 onDismissRequest = { viewModel.dismiss() },
