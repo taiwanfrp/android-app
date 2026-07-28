@@ -2609,7 +2609,7 @@ fun OtherScreen(
 
         Spacer(modifier = Modifier.weight(1f))
         Text(
-            text = stringResource(R.string.version, "V2.4.3"),
+            text = stringResource(R.string.version, "V2.4.5"),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.secondary
         )
