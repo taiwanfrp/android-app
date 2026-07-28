@@ -141,6 +141,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -162,11 +163,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import okio.sink
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import java.io.File
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -228,11 +231,89 @@ class SettingsViewModel(context: Context) : ViewModel() {
     }
 }
 
+sealed class UpdateState {
+    object Idle : UpdateState()
+    data class NewVersionAvailable(val release: GithubRelease) : UpdateState()
+    object Downloading : UpdateState()
+    data class Error(val message: String) : UpdateState()
+}
+
+class UpdateViewModel(private val context: Context) : ViewModel() {
+    private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val updateState: StateFlow<UpdateState> = _updateState
+
+    fun checkUpdate(currentVersion: String) {
+        viewModelScope.launch {
+            try {
+                val latest = RetrofitClient.updateApi.getLatestRelease()
+                val latestVersion = latest.tagName.removePrefix("v")
+                if (isNewerVersion(currentVersion, latestVersion)) {
+                    _updateState.value = UpdateState.NewVersionAvailable(latest)
+                }
+            } catch (e: Exception) {
+                // Ignore update check errors
+            }
+        }
+    }
+
+    private fun isNewerVersion(current: String, latest: String): Boolean {
+        val currentParts = current.split(".").mapNotNull { it.toIntOrNull() }
+        val latestParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+        val size = maxOf(currentParts.size, latestParts.size)
+        for (i in 0 until size) {
+            val c = currentParts.getOrElse(i) { 0 }
+            val l = latestParts.getOrElse(i) { 0 }
+            if (l > c) return true
+            if (c > l) return false
+        }
+        return false
+    }
+
+    fun downloadAndInstall(release: GithubRelease) {
+        val asset = release.assets.find { it.name.endsWith(".apk") } ?: return
+        _updateState.value = UpdateState.Downloading
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val client = OkHttpClient()
+                val request = okhttp3.Request.Builder().url(asset.downloadUrl).build()
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) throw Exception("Download failed")
+
+                val apkFile = File(context.externalCacheDir, "update.apk")
+                response.body?.source()?.use { source ->
+                    apkFile.outputStream().use { output ->
+                        source.readAll(output.sink())
+                    }
+                }
+                installApk(apkFile)
+                _updateState.value = UpdateState.Idle
+            } catch (e: Exception) {
+                _updateState.value = UpdateState.Error(e.message ?: "Download failed")
+            }
+        }
+    }
+
+    private fun installApk(file: File) {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    fun dismiss() {
+        _updateState.value = UpdateState.Idle
+    }
+}
+
 class MainActivity : ComponentActivity() {
     private lateinit var authViewModel: AuthViewModel
     private lateinit var settingsViewModel: SettingsViewModel
     private lateinit var nodeViewModel: NodeViewModel
     private lateinit var tunnelViewModel: TunnelViewModel
+    private lateinit var updateViewModel: UpdateViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -242,10 +323,19 @@ class MainActivity : ComponentActivity() {
         settingsViewModel = SettingsViewModel(applicationContext)
         nodeViewModel = NodeViewModel(applicationContext)
         tunnelViewModel = TunnelViewModel(applicationContext)
+        updateViewModel = UpdateViewModel(applicationContext)
+
+        val versionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            "0.0.0"
+        }
+        updateViewModel.checkUpdate(versionName ?: "0.0.0")
 
         setContent {
             val appTheme by settingsViewModel.themeState.collectAsState()
             val appLanguage by settingsViewModel.languageState.collectAsState()
+            val updateState by updateViewModel.updateState.collectAsState()
             val focusManager = LocalFocusManager.current
             val keyboardController = LocalSoftwareKeyboardController.current
             val isForeground = rememberIsAppInForeground()
@@ -289,6 +379,8 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val loginState by authViewModel.loginState.collectAsState()
                         var isGuestMode by remember { mutableStateOf(false) }
+
+                        UpdateDialog(state = updateState, viewModel = updateViewModel)
 
                         if (isGuestMode) {
                             NodeScreen(
@@ -474,6 +566,11 @@ interface TaiwanFrpApi {
     suspend fun getSystemStatus(): SystemStatusResponse
 }
 
+interface GithubUpdateApi {
+    @GET("repos/taiwanfrp/android-app/releases/latest")
+    suspend fun getLatestRelease(): GithubRelease
+}
+
 object RetrofitClient {
     private const val MAIN_URL = "https://api.taiwanfrp.me/"
     var cookie: String? = null
@@ -493,6 +590,14 @@ object RetrofitClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(TaiwanFrpApi::class.java)
+    }
+
+    val updateApi: GithubUpdateApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://api.github.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GithubUpdateApi::class.java)
     }
 }
 
@@ -3399,6 +3504,67 @@ fun EditTunnelDialog(
             Text(stringResource(R.string.proxy_v2), Modifier.weight(1f))
             Switch(checked = isProxyV2, onCheckedChange = { isProxyV2 = it })
         }
+    }
+}
+
+@Composable
+fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
+    when (state) {
+        is UpdateState.NewVersionAvailable -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismiss() },
+                title = { Text(stringResource(R.string.update_available)) },
+                text = {
+                    Column {
+                        Text(stringResource(R.string.update_new_version, state.release.tagName))
+                        state.release.body?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.downloadAndInstall(state.release) }) {
+                        Text(stringResource(R.string.update_now))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismiss() }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        UpdateState.Downloading -> {
+            Dialog(onDismissRequest = {}) {
+                Card {
+                    Column(
+                        Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.update_downloading))
+                    }
+                }
+            }
+        }
+
+        is UpdateState.Error -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismiss() },
+                title = { Text(stringResource(R.string.update_failed)) },
+                text = { Text(state.message) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismiss() }) {
+                        Text(stringResource(R.string.confirm))
+                    }
+                }
+            )
+        }
+
+        UpdateState.Idle -> {}
     }
 }
 

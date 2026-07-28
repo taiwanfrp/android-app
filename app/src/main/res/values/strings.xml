@@ -133,6 +133,10 @@
     <string name="edit_tunnel_title">編輯隧道</string>
     <string name="update_success">更新成功</string>
     <string name="update_failed">更新失敗：%1$s</string>
+    <string name="update_available">發現新版本</string>
+    <string name="update_new_version">發現新版本：%1$s。是否立即更新？</string>
+    <string name="update_now">立即更新</string>
+    <string name="update_downloading">正在下載更新&#8230;</string>
     <string name="label_tunnel_count">目前隧道數量：%1$d / 3</string>
     <string name="error_remote_port_in_use">此連接埠已被占用</string>
     <string name="random_port">隨機選取</string>
