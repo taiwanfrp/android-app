@@ -33,14 +33,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -52,19 +57,16 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.GppBad
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -76,6 +78,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
@@ -83,7 +87,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -316,6 +319,10 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
     }
 }
 
+enum class AppState {
+    Init, Welcome, App
+}
+
 class MainActivity : ComponentActivity() {
     private lateinit var authViewModel: AuthViewModel
     private lateinit var settingsViewModel: SettingsViewModel
@@ -387,46 +394,95 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val loginState by authViewModel.loginState.collectAsState()
                         var isGuestMode by remember { mutableStateOf(false) }
+                        var appState by remember { mutableStateOf(AppState.Init) }
 
                         UpdateDialog(state = updateState, viewModel = updateViewModel)
 
-                        if (isGuestMode) {
-                            NodeScreen(
-                                viewModel = nodeViewModel,
-                                isGuest = true,
-                                onBack = { isGuestMode = false }
-                            )
-                        } else {
-                            Crossfade(
-                                targetState = loginState,
-                                label = "LoginTransition"
-                            ) { state ->
-                                when (state) {
-                                    is LoginState.LoggedIn -> {
-                                        MainScreen(
-                                            nodeViewModel = nodeViewModel,
-                                            tunnelViewModel = tunnelViewModel,
-                                            authViewModel = authViewModel,
-                                            settingsViewModel = settingsViewModel,
-                                            updateViewModel = updateViewModel
-                                        )
-                                    }
+                        Crossfade(targetState = appState, label = "AppStateTransition") { state ->
+                            when (state) {
+                                AppState.Init -> {
+                                    InitScreen(onInitComplete = {
+                                        appState =
+                                            if (loginState is LoginState.LoggedIn) AppState.App else AppState.Welcome
+                                    })
+                                }
 
-                                    LoginState.Suspended, LoginState.Banned, LoginState.Deleted -> {
-                                        AccountStatusScreen(
-                                            state = state,
-                                            authViewModel = authViewModel,
-                                            nodeViewModel = nodeViewModel,
-                                            tunnelViewModel = tunnelViewModel
-                                        )
-                                    }
+                                AppState.Welcome -> {
+                                    WelcomeScreen(
+                                        authViewModel = authViewModel,
+                                        onEnterGuestMode = {
+                                            isGuestMode = true
+                                            appState = AppState.App
+                                        },
+                                        onLoginSuccess = {
+                                            appState = AppState.App
+                                        }
+                                    )
+                                }
 
-                                    else -> {
-                                        LoginScreen(
-                                            authViewModel = authViewModel,
-                                            settingsViewModel = settingsViewModel,
-                                            onEnterGuestMode = { isGuestMode = true }
+                                AppState.App -> {
+                                    if (isGuestMode) {
+                                        NodeScreen(
+                                            viewModel = nodeViewModel,
+                                            isGuest = true,
+                                            onBack = {
+                                                isGuestMode = false
+                                                appState = AppState.Welcome
+                                            },
+                                            language = appLanguage
                                         )
+                                    } else {
+                                        Crossfade(
+                                            targetState = loginState,
+                                            label = "LoginTransition"
+                                        ) { lState ->
+                                            when (lState) {
+                                                is LoginState.LoggedIn -> {
+                                                    MainScreen(
+                                                        nodeViewModel = nodeViewModel,
+                                                        tunnelViewModel = tunnelViewModel,
+                                                        authViewModel = authViewModel,
+                                                        settingsViewModel = settingsViewModel,
+                                                        updateViewModel = updateViewModel
+                                                    )
+                                                }
+
+                                                LoginState.Suspended, LoginState.Banned, LoginState.Deleted -> {
+                                                    AccountStatusScreen(
+                                                        state = lState,
+                                                        authViewModel = authViewModel,
+                                                        nodeViewModel = nodeViewModel,
+                                                        tunnelViewModel = tunnelViewModel,
+                                                        onBackToWelcome = {
+                                                            appState = AppState.Welcome
+                                                        }
+                                                    )
+                                                }
+
+                                                LoginState.Loading -> {
+                                                    Box(
+                                                        Modifier.fillMaxSize(),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Surface(
+                                                            shape = CircleShape,
+                                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                                            modifier = Modifier.size(64.dp)
+                                                        ) {
+                                                            Box(contentAlignment = Alignment.Center) {
+                                                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                else -> {
+                                                    LaunchedEffect(Unit) {
+                                                        appState = AppState.Welcome
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -965,7 +1021,10 @@ fun MainScreen(
     settingsViewModel: SettingsViewModel,
     updateViewModel: UpdateViewModel
 ) {
-    var selectedItem by remember { mutableStateOf(NavItem.Home) }
+    val navItems = NavItem.entries
+    val pagerState = rememberPagerState(pageCount = { navItems.size })
+    val scope = rememberCoroutineScope()
+    
     var showProfile by remember { mutableStateOf(false) }
     val loginState by authViewModel.loginState.collectAsState()
     val user = (loginState as? LoginState.LoggedIn)?.user
@@ -1007,12 +1066,16 @@ fun MainScreen(
             },
             bottomBar = {
                 NavigationBar {
-                    NavItem.entries.forEach { item ->
+                    navItems.forEachIndexed { index, item ->
                         NavigationBarItem(
                             icon = { Icon(item.icon, contentDescription = null) },
                             label = { Text(stringResource(item.titleRes), fontSize = 10.sp) },
-                            selected = selectedItem == item,
-                            onClick = { selectedItem = item },
+                            selected = pagerState.currentPage == index,
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 indicatorColor = MaterialTheme.colorScheme.primaryContainer
                             )
@@ -1024,13 +1087,22 @@ fun MainScreen(
             val singleExpandMode by settingsViewModel.singleExpandMode.collectAsState()
             val appLanguage by settingsViewModel.languageState.collectAsState()
             Box(Modifier.padding(innerPadding)) {
-                Crossfade(targetState = selectedItem, label = "TabTransition") { tab ->
-                    when (tab) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1
+                ) { page ->
+                    when (navItems[page]) {
                         NavItem.Home -> HomeScreen(
                             user,
                             refreshInterval,
                             authViewModel,
-                            onNavigate = { selectedItem = it })
+                            onNavigate = { target ->
+                                val targetIndex = navItems.indexOf(target)
+                                if (targetIndex != -1) {
+                                    scope.launch { pagerState.animateScrollToPage(targetIndex) }
+                                }
+                            })
 
                         NavItem.Node -> NodeScreen(
                             nodeViewModel,
@@ -1105,238 +1177,225 @@ fun HomeScreen(
         }
     }
 
-    val pullState = rememberPullToRefreshState()
-    val density = LocalDensity.current
-
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        state = pullState,
-        onRefresh = { refresh() },
-        indicator = {
-            CustomCircularIndicator(
-                state = pullState,
-                isRefreshing = isRefreshing,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 4.dp)
-            )
-        }
-    ) {
-        val offset = with(density) { pullState.distanceFraction * 80.dp.toPx() }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { translationY = offset }) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (isRefreshing) {
                 item {
-                    Text(
-                        text = stringResource(
-                            R.string.welcome_user,
-                            user?.username ?: stringResource(R.string.unknown)
-                        ),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
                 }
+            }
 
-                item {
+            item {
+                Text(
+                    text = stringResource(
+                        R.string.welcome_user,
+                        user?.username ?: stringResource(R.string.unknown)
+                    ),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     DashboardCard(
                         title = stringResource(R.string.nodes),
                         color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(136.dp),
                         onClick = { onNavigate(NavItem.Node) }
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    stringResource(
-                                        R.string.label_active,
-                                        nodes.count { it.status == "active" }),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    stringResource(R.string.label_total, nodes.size),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.Dns,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .alpha(0.3f)
+                        Column {
+                            Text(
+                                stringResource(
+                                    R.string.label_active,
+                                    nodes.count { it.status == "active" }),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                stringResource(R.string.label_total, nodes.size),
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
-                }
-
-                item {
                     DashboardCard(
                         title = stringResource(R.string.tunnels),
                         color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(136.dp),
                         onClick = { onNavigate(NavItem.Tunnel) }
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    stringResource(
-                                        R.string.label_active,
-                                        tunnels.count { it.status == "active" }),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    stringResource(R.string.label_total, tunnels.size),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.AltRoute,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .alpha(0.3f)
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    DashboardCard(
-                        title = stringResource(R.string.system_status),
-                        color = MaterialTheme.colorScheme.tertiaryContainer
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            StatusIndicator("API", status?.api)
-                            StatusIndicator("Database", status?.database)
-                            StatusIndicator("Redis", status?.redis)
-                            Text("Version: ${status?.version ?: "N/A"}", fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                item {
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
+                        Column {
                             Text(
-                                stringResource(R.string.official_links),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                stringResource(
+                                    R.string.label_active,
+                                    tunnels.count { it.status == "active" }),
+                                style = MaterialTheme.typography.bodyLarge
                             )
-                            Spacer(Modifier.height(12.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = {
-                                        try {
-                                            val intent = Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://taiwanfrp.me")
-                                            ).apply {
-                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                R.string.error_open_link,
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                ) {
-                                    Icon(
-                                        painterResource(R.mipmap.ic_launcher_foreground),
-                                        null,
-                                        modifier = Modifier.size(30.dp),
-                                        tint = Color.Unspecified
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.website))
-                                }
-
-                                Button(
-                                    onClick = {
-                                        try {
-                                            val intent = Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://discord.gg/ueGFVVHp85")
-                                            ).apply {
-                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                R.string.error_open_link,
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF5865F2),
-                                        contentColor = Color.White
-                                    )
-                                ) {
-                                    Icon(
-                                        painterResource(R.drawable.ic_discord),
-                                        null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Discord")
-                                }
-
-                                Button(
-                                    onClick = {
-                                        try {
-                                            val intent = Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://github.com/TaiwanFRP")
-                                            ).apply {
-                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                R.string.error_open_link,
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.Black,
-                                        contentColor = Color.White
-                                    )
-                                ) {
-                                    Icon(Icons.Default.Code, null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.github))
-                                }
-                            }
+                            Text(
+                                stringResource(R.string.label_total, tunnels.size),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
-                        Spacer(Modifier.height(16.dp))
                     }
                 }
+            }
+
+            item {
+                DashboardCard(
+                    title = stringResource(R.string.system_status),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.heightIn(min = 180.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatusIndicator("API", status?.api)
+                        StatusIndicator("Database", status?.database)
+                        StatusIndicator("Redis", status?.redis)
+                        Text("Version: ${status?.version ?: "N/A"}", fontSize = 12.sp)
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text(
+                            stringResource(R.string.official_links),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://taiwanfrp.me")
+                                        ).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            R.string.error_open_link,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(
+                                    painterResource(R.mipmap.ic_launcher_foreground),
+                                    null,
+                                    modifier = Modifier.size(30.dp),
+                                    tint = Color.Unspecified
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.website))
+                            }
+
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://discord.gg/ueGFVVHp85")
+                                        ).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            R.string.error_open_link,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF5865F2),
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_discord),
+                                    null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Discord")
+                            }
+
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://github.com/TaiwanFRP")
+                                        ).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            R.string.error_open_link,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black,
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Icon(Icons.Default.Code, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.github))
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -1530,6 +1589,8 @@ fun NodeContent(
     modifier: Modifier = Modifier,
     language: AppLanguage = AppLanguage.Auto
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+
     Box(modifier.fillMaxSize()) {
         val context = LocalContext.current
         var nodeToEdit by remember { mutableStateOf<NodeResponse?>(null) }
@@ -1543,61 +1604,84 @@ fun NodeContent(
             )
         }
 
-        when (val state = uiState) {
-            is NodeUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-            is NodeUiState.Error -> Text(
-                stringResource(R.string.error_prefix, state.message),
-                Modifier.padding(16.dp),
-                color = MaterialTheme.colorScheme.error
+        Column(Modifier.fillMaxSize()) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text(stringResource(R.string.search_nodes)) },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                shape = RoundedCornerShape(16.dp),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
             )
 
-            is NodeUiState.Success -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    if (state.nodes.isEmpty()) {
-                        item {
-                            Column(
-                                Modifier
-                                    .fillParentMaxSize()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    stringResource(R.string.no_nodes),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                            }
+            Box(Modifier.weight(1f)) {
+                when (val state = uiState) {
+                    is NodeUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    is NodeUiState.Error -> Text(
+                        stringResource(R.string.error_prefix, state.message),
+                        Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.error
+                    )
+
+                    is NodeUiState.Success -> {
+                        val filteredNodes = state.nodes.filter {
+                            it.name?.contains(searchQuery, ignoreCase = true) == true ||
+                                    it.host?.contains(searchQuery, ignoreCase = true) == true
                         }
-                    } else {
-                        if (!isGuest && user?.permissions?.contains("node.create") == true) {
-                            item {
-                                OutlinedButton(
-                                    onClick = onAddClick,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.add_node))
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            if (filteredNodes.isEmpty()) {
+                                item {
+                                    Column(
+                                        Modifier
+                                            .fillParentMaxSize()
+                                            .padding(32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.no_nodes),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                }
+                            } else {
+                                if (!isGuest && user?.permissions?.contains("node.create") == true && searchQuery.isEmpty()) {
+                                    item {
+                                        OutlinedButton(
+                                            onClick = onAddClick,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 8.dp)
+                                        ) {
+                                            Icon(Icons.Default.Add, null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(R.string.add_node))
+                                        }
+                                    }
+                                }
+                                items(filteredNodes) { node ->
+                                    NodeItem(
+                                        node = node,
+                                        user = user,
+                                        isExpanded = if (singleExpandMode) expandedNodeId == node.id else expandedNodeIds[node.id
+                                            ?: -1] == true,
+                                        onToggle = { onToggle(node.id) },
+                                        onDelete = { onDelete(node) },
+                                        onEdit = { nodeToEdit = node },
+                                        singleExpandMode = singleExpandMode
+                                    )
                                 }
                             }
-                        }
-                        items(state.nodes) { node ->
-                            NodeItem(
-                                node = node,
-                                user = user,
-                                isExpanded = if (singleExpandMode) expandedNodeId == node.id else expandedNodeIds[node.id
-                                    ?: -1] == true,
-                                onToggle = { onToggle(node.id) },
-                                onDelete = { onDelete(node) },
-                                onEdit = { nodeToEdit = node },
-                                singleExpandMode = singleExpandMode
-                            )
                         }
                     }
                 }
@@ -2208,6 +2292,8 @@ private fun FullScreenForm(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
+                            .imePadding()
+                            .navigationBarsPadding()
                             .pointerInput(Unit) {
                                 detectTapGestures(onTap = {
                                     focusManager.clearFocus()
@@ -2226,47 +2312,49 @@ private fun FullScreenForm(
 }
 
 @Composable
-fun LoginScreen(
+fun InitScreen(onInitComplete: () -> Unit) {
+    LaunchedEffect(Unit) {
+        delay(1500)
+        onInitComplete()
+    }
+    Column(
+        Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("TaiwanFRP", fontSize = 45.sp, color = MaterialTheme.colorScheme.primary)
+        Text(
+            stringResource(R.string.login_subtitle),
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        Spacer(Modifier.height(32.dp))
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = Modifier.size(64.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+fun WelcomeScreen(
     authViewModel: AuthViewModel,
-    settingsViewModel: SettingsViewModel,
-    onEnterGuestMode: () -> Unit
+    onEnterGuestMode: () -> Unit,
+    onLoginSuccess: () -> Unit
 ) {
     val loginState by authViewModel.loginState.collectAsState()
-    val appTheme by settingsViewModel.themeState.collectAsState()
     var showLoginWebView by remember { mutableStateOf(false) }
-    val isSystemInDark = isSystemInDarkTheme()
 
     Box(Modifier.fillMaxSize()) {
-        IconButton(
-            onClick = {
-                val nextTheme = when (appTheme) {
-                    AppTheme.Dark, AppTheme.Oled, AppTheme.Blue, AppTheme.Green -> AppTheme.Light
-                    AppTheme.Light, AppTheme.BlueLight, AppTheme.GreenLight, AppTheme.White -> AppTheme.Dark
-                    AppTheme.System -> if (isSystemInDark) AppTheme.Light else AppTheme.Dark
-                }
-                settingsViewModel.setTheme(nextTheme)
-            },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(16.dp)
-        ) {
-            val isDarkNow = when (appTheme) {
-                AppTheme.Light, AppTheme.BlueLight, AppTheme.GreenLight, AppTheme.White -> false
-                AppTheme.Dark, AppTheme.Oled, AppTheme.Blue, AppTheme.Green -> true
-                else -> isSystemInDarkTheme()
-            }
-            Icon(
-                imageVector = if (isDarkNow) Icons.Default.LightMode else Icons.Default.DarkMode,
-                contentDescription = "Toggle Theme",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(32.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -2299,37 +2387,52 @@ fun LoginScreen(
                 }
             }
 
-            if (loginState is LoginState.Loading) CircularProgressIndicator()
-            else {
+            if (loginState is LoginState.Loading) {
+                CircularProgressIndicator()
+            } else {
                 Button(
                     onClick = { showLoginWebView = true },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5865F2))
+                        .width(380.dp)
+                        .height(56.dp)
                 ) {
-                    Icon(painterResource(R.drawable.ic_discord), null, Modifier.size(24.dp))
-                    Spacer(Modifier.width(12.dp))
                     Text(stringResource(R.string.login_with_discord))
+                    Spacer(Modifier.width(8.dp))
+                    Icon(painterResource(R.drawable.ic_discord), null, Modifier.size(24.dp))
                 }
                 Spacer(Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = onEnterGuestMode, modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
+                Button(
+                    onClick = onEnterGuestMode,
+                    modifier = Modifier
+                        .width(380.dp)
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Text(stringResource(R.string.view_nodes_guest))
                 }
             }
         }
-        if (showLoginWebView) {
+
+        AnimatedVisibility(
+            visible = showLoginWebView,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it })
+        ) {
             DiscordLoginWebView(
                 onClose = { showLoginWebView = false },
                 onSuccess = {
                     showLoginWebView = false
                     authViewModel.checkAuth(force = true)
+                    onLoginSuccess()
                 },
-                onError = { showLoginWebView = false; authViewModel.setError(it) })
+                onError = {
+                    showLoginWebView = false
+                    authViewModel.setError(it)
+                }
+            )
         }
     }
 }
@@ -2398,20 +2501,22 @@ fun LanguageSelector(currentLanguage: AppLanguage, onLanguageChange: (AppLanguag
 fun DashboardCard(
     title: String,
     color: Color,
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Card(
-        Modifier
+        modifier = modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        colors = CardDefaults.cardColors(containerColor = color)
+        colors = CardDefaults.cardColors(containerColor = color),
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
@@ -2424,7 +2529,7 @@ fun DashboardCard(
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             content()
         }
     }
@@ -2446,8 +2551,8 @@ fun OtherScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
             .verticalScroll(rememberScrollState())
+            .padding(16.dp)
     ) {
         Text(
             stringResource(R.string.theme_setting),
@@ -2642,7 +2747,7 @@ fun OtherScreen(
 
         Spacer(modifier = Modifier.weight(1f))
         Text(
-            text = stringResource(R.string.version, "V2.5"),
+            text = stringResource(R.string.version, "V2.6"),
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.secondary
         )
@@ -2659,7 +2764,8 @@ fun AccountStatusScreen(
     state: LoginState,
     authViewModel: AuthViewModel,
     nodeViewModel: NodeViewModel? = null,
-    tunnelViewModel: TunnelViewModel? = null
+    tunnelViewModel: TunnelViewModel? = null,
+    onBackToWelcome: () -> Unit
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -2678,71 +2784,92 @@ fun AccountStatusScreen(
             onLogout = {
                 nodeViewModel?.clearData()
                 tunnelViewModel?.clearData()
+                onBackToWelcome()
             }
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                if (state == LoginState.Suspended) Color.Transparent else color.copy(
-                    alpha = 0.1f
-                )
-            )
-            .padding(32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = if (state == LoginState.Suspended) Icons.Default.SettingsSuggest else Icons.Default.GppBad,
-                contentDescription = null,
-                modifier = Modifier.size(80.dp),
-                tint = color
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold,
-                color = if (state == LoginState.Suspended) MaterialTheme.colorScheme.onBackground else color
-            )
-            Spacer(modifier = Modifier.height(48.dp))
-
-            Button(
-                onClick = {
-                    try {
-                        val intent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://discord.gg/ueGFVVHp85")
-                        ).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(context, R.string.error_open_link, Toast.LENGTH_SHORT).show()
+    Scaffold(
+        topBar = {
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
+                title = { Text("TaiwanFRP") },
+                navigationIcon = {
+                    IconButton(onClick = onBackToWelcome) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5865F2))
-            ) {
-                Icon(painterResource(R.drawable.ic_discord), null, Modifier.size(24.dp))
-                Spacer(Modifier.width(12.dp))
-                Text(stringResource(R.string.join_discord))
-            }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(
+                    if (state == LoginState.Suspended) Color.Transparent else color.copy(
+                        alpha = 0.1f
+                    )
+                )
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Placeholder for 200x200
+                Box(
+                    modifier = Modifier
+                        .size(200.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceContainerHighest,
+                            RoundedCornerShape(20.dp)
+                        )
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontSize = if (state == LoginState.Deleted) 28.sp else 45.sp,
+                    lineHeight = if (state == LoginState.Deleted) 36.sp else 52.sp,
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
+                    color = if (state == LoginState.Suspended) MaterialTheme.colorScheme.onBackground else color
+                )
+                Spacer(modifier = Modifier.height(48.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://discord.gg/ueGFVVHp85")
+                            ).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, R.string.error_open_link, Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Icon(painterResource(R.drawable.ic_discord), null, Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(stringResource(R.string.join_discord))
+                }
 
-            OutlinedButton(
-                onClick = { showLogoutDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text(stringResource(R.string.logout))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedButton(
+                    onClick = { showLogoutDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(stringResource(R.string.logout))
+                }
             }
         }
     }
@@ -2758,6 +2885,7 @@ fun LogoutDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(stringResource(R.string.logout_confirm)) },
         text = {
             Column {
@@ -2817,7 +2945,7 @@ fun LocaleWrapper(language: AppLanguage, content: @Composable () -> Unit) {
     val locale = when (language) {
         AppLanguage.Zh -> java.util.Locale.TAIWAN
         AppLanguage.En -> java.util.Locale.ENGLISH
-        else -> java.util.Locale.getDefault()
+        else -> configuration.locales.get(0)
     }
 
     val newConfig = android.content.res.Configuration(configuration)
@@ -3027,7 +3155,7 @@ fun CreateTunnelDialog(
                 label = { Text(stringResource(R.string.field_node)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedNodeMenu) },
                 modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     .fillMaxWidth(),
                 isError = showErrors && selectedNode == null,
                 supportingText = if (showErrors && selectedNode == null) {
@@ -3073,7 +3201,7 @@ fun CreateTunnelDialog(
                 label = { Text(stringResource(R.string.field_protocol)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedProtocolMenu) },
                 modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     .fillMaxWidth()
             )
             ExposedDropdownMenu(
@@ -3406,7 +3534,7 @@ fun EditTunnelDialog(
                 label = { Text(stringResource(R.string.field_node)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedNodeMenu) },
                 modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     .fillMaxWidth(),
                 isError = showErrors && selectedNodeId == null,
                 supportingText = if (showErrors && selectedNodeId == null) {
@@ -3449,7 +3577,7 @@ fun EditTunnelDialog(
                 label = { Text(stringResource(R.string.field_protocol)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedProtocolMenu) },
                 modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     .fillMaxWidth()
             )
             ExposedDropdownMenu(
@@ -3684,10 +3812,10 @@ fun ProfileScreen(
         }
     ) { padding ->
         LazyColumn(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp)
         ) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {

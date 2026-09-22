@@ -66,8 +66,8 @@
     <string name="yes">是</string>
     <string name="no">否</string>
     <string name="unknown">未知</string>
-    <string name="status_active">在線</string>
-    <string name="status_inactive">離線</string>
+    <string name="status_active">未知</string>
+    <string name="status_inactive">未知</string>
     <string name="status_draft">未審核</string>
     <string name="active">已啟用</string>
     <string name="label_enabled_status">啟用狀態</string>
@@ -145,4 +145,5 @@
     <string name="random_port">隨機選取</string>
     <string name="error_required">此欄位為必填</string>
     <string name="error_selection_required">請選擇一個項目</string>
+    <string name="search_nodes">搜尋節點</string>
 </resources>

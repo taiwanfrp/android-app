@@ -66,8 +66,8 @@
     <string name="yes">Yes</string>
     <string name="no">No</string>
     <string name="unknown">Unknown</string>
-    <string name="status_active">Online</string>
-    <string name="status_inactive">Offline</string>
+    <string name="status_active">N/A</string>
+    <string name="status_inactive">N/A</string>
     <string name="status_draft">Under Review</string>
     <string name="active">Enabled</string>
     <string name="label_enabled_status">Enable Status</string>
@@ -145,4 +145,5 @@
     <string name="random_port">Random Select</string>
     <string name="error_required">This field is required</string>
     <string name="error_selection_required">Please select an item</string>
+    <string name="search_nodes">Search Nodes</string>
 </resources>
