@@ -14,3 +14,20 @@ data class GithubAsset(
     @SerializedName("browser_download_url") val downloadUrl: String,
     val size: Long
 )
+
+data class GithubTag(
+    val name: String,
+    val commit: GithubCommitRef
+)
+
+data class GithubCommitRef(
+    val sha: String
+)
+
+data class GithubCommit(
+    val commit: GithubCommitDetail
+)
+
+data class GithubCommitDetail(
+    val message: String
+)

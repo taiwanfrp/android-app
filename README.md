@@ -39,6 +39,16 @@ TaiwanFRP 是一款為 [TaiwanFRP](https://taiwanfrp.me)
 - **權限管理**：根據使用者身分組自動切換可用功能（如管理員可建立節點）。
 - **隱私控制**：支援清除 Discord 登入快取。
 
+## 🎨 主題演示
+
+|                     淺色                      |                     深色                      |                     系統                      |
+|:-------------------------------------------:|:-------------------------------------------:|:-------------------------------------------:|
+| <img src="screenshots/淺色.jpg" width="250">  | <img src="screenshots/深色.jpg" width="250">  | <img src="screenshots/系統.jpg" width="250">  |
+|                   **藍色**                    |                   **湖水藍**                   |                   **綠色**                    |
+| <img src="screenshots/藍色.jpg" width="250">  | <img src="screenshots/湖水藍.jpg" width="250"> | <img src="screenshots/綠色.jpg" width="250">  |
+|                   **薄荷綠**                   |                   **極致白**                   |                   **極致黑**                   |
+| <img src="screenshots/薄荷綠.jpg" width="250"> | <img src="screenshots/極致白.jpg" width="250"> | <img src="screenshots/極致黑.jpg" width="250"> |
+
 ## 🛠️ 技術棧
 
 - **UI 框架**：[Jetpack Compose](https://developer.android.com/jetpack/compose) (Material 3)

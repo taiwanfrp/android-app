@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.taiwanfrp
 
 import android.content.Context
@@ -62,12 +64,14 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.GppBad
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -75,9 +79,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -86,6 +90,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -125,6 +130,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -470,7 +476,7 @@ class MainActivity : ComponentActivity() {
                                                             modifier = Modifier.size(64.dp)
                                                         ) {
                                                             Box(contentAlignment = Alignment.Center) {
-                                                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                                                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
                                                             }
                                                         }
                                                     }
@@ -634,6 +640,15 @@ interface TaiwanFrpApi {
 interface GithubUpdateApi {
     @GET("repos/taiwanfrp/android-app/releases/latest")
     suspend fun getLatestRelease(): GithubRelease
+
+    @GET("repos/taiwanfrp/android-app/releases/tags/{tag}")
+    suspend fun getReleaseByTag(@retrofit2.http.Path("tag") tag: String): GithubRelease
+
+    @GET("repos/taiwanfrp/android-app/tags")
+    suspend fun getTags(): List<GithubTag>
+
+    @GET("repos/taiwanfrp/android-app/commits/{sha}")
+    suspend fun getCommit(@retrofit2.http.Path("sha") sha: String): GithubCommit
 }
 
 object RetrofitClient {
@@ -1012,7 +1027,7 @@ enum class NavItem(val titleRes: Int, val icon: ImageVector) {
     Other(R.string.settings, Icons.Default.Settings)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MainScreen(
     nodeViewModel: NodeViewModel,
@@ -1077,7 +1092,11 @@ fun MainScreen(
                                 }
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                     }
@@ -1086,7 +1105,7 @@ fun MainScreen(
         ) { innerPadding ->
             val singleExpandMode by settingsViewModel.singleExpandMode.collectAsState()
             val appLanguage by settingsViewModel.languageState.collectAsState()
-            Box(Modifier.padding(innerPadding)) {
+            Box(Modifier.fillMaxSize()) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
@@ -1097,6 +1116,7 @@ fun MainScreen(
                             user,
                             refreshInterval,
                             authViewModel,
+                            innerPadding,
                             onNavigate = { target ->
                                 val targetIndex = navItems.indexOf(target)
                                 if (targetIndex != -1) {
@@ -1109,7 +1129,8 @@ fun MainScreen(
                             user = user,
                             refreshInterval = refreshInterval,
                             singleExpandMode = singleExpandMode,
-                            language = appLanguage
+                            language = appLanguage,
+                            innerPadding = innerPadding
                         )
 
                         NavItem.Tunnel -> TunnelScreen(
@@ -1117,7 +1138,8 @@ fun MainScreen(
                             user = user,
                             refreshInterval = refreshInterval,
                             singleExpandMode = singleExpandMode,
-                            language = appLanguage
+                            language = appLanguage,
+                            innerPadding = innerPadding
                         )
 
                         NavItem.Other -> OtherScreen(
@@ -1125,7 +1147,8 @@ fun MainScreen(
                             authViewModel,
                             nodeViewModel,
                             tunnelViewModel,
-                            updateViewModel
+                            updateViewModel,
+                            innerPadding
                         )
                     }
                 }
@@ -1134,12 +1157,13 @@ fun MainScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     user: UserMeResponse?,
     refreshInterval: Int,
     authViewModel: AuthViewModel,
+    innerPadding: PaddingValues,
     onNavigate: (NavItem) -> Unit
 ) {
     val context = LocalContext.current
@@ -1180,24 +1204,21 @@ fun HomeScreen(
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                top = innerPadding.calculateTopPadding() + 16.dp,
+                bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                start = 16.dp,
+                end = 16.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (isRefreshing) {
                 item {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
+                        LoadingIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(12.dp)
+                        )
                     }
                 }
             }
@@ -1426,7 +1447,8 @@ fun NodeScreen(
     singleExpandMode: Boolean = true,
     isGuest: Boolean = false,
     onBack: (() -> Unit)? = null,
-    language: AppLanguage = AppLanguage.Auto
+    language: AppLanguage = AppLanguage.Auto,
+    innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var expandedNodeId by remember { mutableStateOf<Int?>(null) }
@@ -1517,14 +1539,13 @@ fun NodeScreen(
             isRefreshing = isRefreshing,
             state = pullState,
             onRefresh = { viewModel.refreshNodes() },
-            modifier = Modifier.padding(padding),
             indicator = {
-                CustomCircularIndicator(
+                BarePullToRefreshIndicator(
                     state = pullState,
                     isRefreshing = isRefreshing,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 4.dp)
+                        .padding(top = padding.calculateTopPadding() + 4.dp)
                 )
             }
         ) {
@@ -1547,7 +1568,8 @@ fun NodeScreen(
                     },
                     onDelete = { nodeToDelete = it },
                     onAddClick = { showCreateNodeDialog = true },
-                    language = language
+                    language = language,
+                    innerPadding = padding
                 )
             }
         }
@@ -1570,10 +1592,11 @@ fun NodeScreen(
             nodeContent(padding)
         }
     } else {
-        nodeContent(PaddingValues(0.dp))
+        nodeContent(innerPadding)
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NodeContent(
     uiState: NodeUiState,
@@ -1587,7 +1610,8 @@ fun NodeContent(
     onDelete: (NodeResponse) -> Unit,
     onAddClick: () -> Unit,
     modifier: Modifier = Modifier,
-    language: AppLanguage = AppLanguage.Auto
+    language: AppLanguage = AppLanguage.Auto,
+    innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
@@ -1610,7 +1634,12 @@ fun NodeContent(
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(
+                        top = innerPadding.calculateTopPadding() + 8.dp,
+                        bottom = 8.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    ),
                 placeholder = { Text(stringResource(R.string.search_nodes)) },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 shape = RoundedCornerShape(16.dp),
@@ -1622,7 +1651,7 @@ fun NodeContent(
 
             Box(Modifier.weight(1f)) {
                 when (val state = uiState) {
-                    is NodeUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    is NodeUiState.Loading -> LoadingIndicator(Modifier.align(Alignment.Center))
                     is NodeUiState.Error -> Text(
                         stringResource(R.string.error_prefix, state.message),
                         Modifier.padding(16.dp),
@@ -1636,7 +1665,12 @@ fun NodeContent(
                         }
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                            contentPadding = PaddingValues(
+                                top = 4.dp,
+                                bottom = innerPadding.calculateBottomPadding() + 4.dp,
+                                start = 16.dp,
+                                end = 16.dp
+                            )
                         ) {
                             if (filteredNodes.isEmpty()) {
                                 item {
@@ -1826,14 +1860,15 @@ fun NodeItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TunnelScreen(
     viewModel: TunnelViewModel,
     user: UserMeResponse? = null,
     refreshInterval: Int = 60,
     singleExpandMode: Boolean = true,
-    language: AppLanguage = AppLanguage.Auto
+    language: AppLanguage = AppLanguage.Auto,
+    innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var expandedTunnelId by remember { mutableStateOf<String?>(null) }
@@ -1870,12 +1905,12 @@ fun TunnelScreen(
         state = pullState,
         onRefresh = { viewModel.refreshTunnels() },
         indicator = {
-            CustomCircularIndicator(
+            BarePullToRefreshIndicator(
                 state = pullState,
                 isRefreshing = isRefreshing,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 4.dp)
+                    .padding(top = innerPadding.calculateTopPadding() + 4.dp)
             )
         }
     ) {
@@ -1945,7 +1980,7 @@ fun TunnelScreen(
             }
 
             when (val state = uiState) {
-                is TunnelUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                is TunnelUiState.Loading -> LoadingIndicator(Modifier.align(Alignment.Center))
                 is TunnelUiState.Error -> Text(
                     stringResource(R.string.error_prefix, state.message),
                     Modifier.padding(16.dp),
@@ -1958,7 +1993,12 @@ fun TunnelScreen(
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(
+                            top = innerPadding.calculateTopPadding() + 4.dp,
+                            bottom = innerPadding.calculateBottomPadding() + 4.dp,
+                            start = 16.dp,
+                            end = 16.dp
+                        )
                     ) {
                         item {
                             Text(
@@ -2311,36 +2351,61 @@ private fun FullScreenForm(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InitScreen(onInitComplete: () -> Unit) {
+    var titleWidth by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+
     LaunchedEffect(Unit) {
         delay(1500)
         onInitComplete()
     }
-    Column(
+    Box(
         Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        contentAlignment = Alignment.Center
     ) {
-        Text("TaiwanFRP", fontSize = 45.sp, color = MaterialTheme.colorScheme.primary)
-        Text(
-            stringResource(R.string.login_subtitle),
-            fontSize = 16.sp,
-            color = MaterialTheme.colorScheme.secondary
-        )
-        Spacer(Modifier.height(32.dp))
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.size(64.dp)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Text(
+                "TaiwanFRP",
+                fontSize = 45.sp,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.onSizeChanged { titleWidth = it.width }
+            )
+            Text(
+                stringResource(R.string.login_subtitle),
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(Modifier.height(32.dp))
+            if (titleWidth > 0) {
+                val titleWidthDp = with(density) { titleWidth.toDp() }
+                val scale = titleWidthDp.value / 48f
+                Box(
+                    modifier = Modifier
+                        .height(48.dp * scale)
+                        .width(titleWidthDp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LoadingIndicator(
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        },
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(48.dp)) // Placeholder while measuring
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun WelcomeScreen(
     authViewModel: AuthViewModel,
@@ -2388,7 +2453,7 @@ fun WelcomeScreen(
             }
 
             if (loginState is LoginState.Loading) {
-                CircularProgressIndicator()
+                LoadingIndicator()
             } else {
                 Button(
                     onClick = { showLoginWebView = true },
@@ -2541,7 +2606,8 @@ fun OtherScreen(
     authViewModel: AuthViewModel,
     nodeViewModel: NodeViewModel,
     tunnelViewModel: TunnelViewModel,
-    updateViewModel: UpdateViewModel
+    updateViewModel: UpdateViewModel,
+    innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val appTheme by settingsViewModel.themeState.collectAsState()
     val appLanguage by settingsViewModel.languageState.collectAsState()
@@ -2552,7 +2618,12 @@ fun OtherScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(
+                top = innerPadding.calculateTopPadding() + 16.dp,
+                bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                start = 16.dp,
+                end = 16.dp
+            )
     ) {
         Text(
             stringResource(R.string.theme_setting),
@@ -2698,64 +2769,228 @@ fun OtherScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = {
-                val versionName = try {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                } catch (e: Exception) {
-                    "0.0.0"
-                }
-                updateViewModel.checkUpdate(versionName ?: "0.0.0", manual = true)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        ) {
-            Icon(Icons.Default.Refresh, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.check_update))
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = {
-                try {
-                    val intent = Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                    ).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(context, R.string.error_open_link, Toast.LENGTH_SHORT).show()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        ) {
-            Icon(Icons.Default.PlayArrow, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.watch_demo))
-        }
-
         Spacer(modifier = Modifier.weight(1f))
-        Text(
-            text = stringResource(R.string.version, "V2.6"),
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.secondary
-        )
-        Text(
-            text = stringResource(R.string.developer),
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.secondary
-        )
+
+        var showVersionDialog by remember { mutableStateOf(false) }
+        var showDeveloperDialog by remember { mutableStateOf(false) }
+
+        if (showVersionDialog) {
+            val versionName = try {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            } catch (e: Exception) {
+                "0.0.0"
+            }
+            val loadingStr = stringResource(R.string.loading)
+            val noUpdateContentStr = stringResource(R.string.version_no_update_content)
+            val latestUpdateContentStr = stringResource(R.string.version_latest_update_content, "")
+            val fetchFailedStr = stringResource(R.string.version_fetch_failed)
+
+            val versionTitleStr = stringResource(R.string.version_title)
+            val checkUpdateStr = stringResource(R.string.check_update)
+            val cancelStr = stringResource(R.string.cancel)
+            val versionCurrentStr = stringResource(R.string.version_current, versionName ?: "0.0.0")
+
+            var releaseBody by remember { mutableStateOf(loadingStr) }
+            LaunchedEffect(versionName, appLanguage) {
+                releaseBody = loadingStr
+                try {
+                    val release = RetrofitClient.updateApi.getReleaseByTag("v$versionName")
+                    var body = release.body
+                    if (body.isNullOrBlank()) {
+                        val tags = RetrofitClient.updateApi.getTags()
+                        val tag = tags.find { it.name == "v$versionName" }
+                        if (tag != null) {
+                            val commit = RetrofitClient.updateApi.getCommit(tag.commit.sha)
+                            body = commit.commit.message
+                        }
+                    }
+                    releaseBody = if (body.isNullOrBlank()) noUpdateContentStr else body
+                } catch (e: Exception) {
+                    try {
+                        val release = RetrofitClient.updateApi.getLatestRelease()
+                        var body = release.body
+                        if (body.isNullOrBlank()) {
+                            val tags = RetrofitClient.updateApi.getTags()
+                            val tag = tags.find { it.name == release.tagName }
+                            if (tag != null) {
+                                val commit = RetrofitClient.updateApi.getCommit(tag.commit.sha)
+                                body = commit.commit.message
+                            }
+                        }
+                        val finalBody = if (body.isNullOrBlank()) noUpdateContentStr else body
+                        releaseBody = latestUpdateContentStr + finalBody
+                    } catch (e: Exception) {
+                        releaseBody = fetchFailedStr
+                    }
+                }
+            }
+            AlertDialog(
+                onDismissRequest = { showVersionDialog = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+                modifier = Modifier.width(312.dp),
+                shape = RoundedCornerShape(28.dp),
+                icon = { Icon(Icons.Outlined.Info, null) },
+                title = { Text(versionTitleStr) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(versionCurrentStr)
+                        Spacer(Modifier.height(8.dp))
+                        Text(releaseBody, style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showVersionDialog = false
+                            updateViewModel.checkUpdate(versionName ?: "0.0.0", manual = true)
+                        }
+                    ) {
+                        Text(checkUpdateStr)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showVersionDialog = false }) {
+                        Text(cancelStr)
+                    }
+                }
+            )
+        }
+
+        if (showDeveloperDialog) {
+            val developerInfoStr = stringResource(R.string.developer_info)
+            val developerAppStr = stringResource(R.string.developer_app)
+            val developerBackendStr = stringResource(R.string.developer_backend)
+
+            Dialog(
+                onDismissRequest = { showDeveloperDialog = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.width(312.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Outlined.Groups, null)
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = developerInfoStr,
+                            fontSize = 28.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        androidx.compose.material3.LinearWavyProgressIndicator(
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://github.com/lnstw")
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                }
+                            },
+                            modifier = Modifier.width(248.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            coil.compose.AsyncImage(
+                                model = "https://avatars.githubusercontent.com/u/126395074?v=4",
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(developerAppStr, fontSize = 12.sp)
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://github.com/redbean0721")
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                }
+                            },
+                            modifier = Modifier.width(248.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            coil.compose.AsyncImage(
+                                model = "https://avatars.githubusercontent.com/u/102888458?v=4",
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(developerBackendStr, fontSize = 12.sp)
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        androidx.compose.material3.LinearWavyProgressIndicator(
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = { showVersionDialog = true }) {
+                Icon(
+                    Icons.Outlined.Info,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    stringResource(R.string.version_title),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            TextButton(onClick = { showDeveloperDialog = true }) {
+                Icon(
+                    Icons.Outlined.Groups,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    stringResource(R.string.developer_info),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 
@@ -2771,7 +3006,7 @@ fun AccountStatusScreen(
     val context = LocalContext.current
 
     val (title, color) = when (state) {
-        LoginState.Suspended -> stringResource(R.string.account_suspended) to Color(0xFFF1C40F) // Yellow
+        LoginState.Suspended -> stringResource(R.string.account_suspended) to Color(0xFFF1C40F)
         LoginState.Banned -> stringResource(R.string.account_banned) to MaterialTheme.colorScheme.error
         LoginState.Deleted -> stringResource(R.string.account_deleted) to MaterialTheme.colorScheme.error
         else -> "" to MaterialTheme.colorScheme.error
@@ -2815,21 +3050,16 @@ fun AccountStatusScreen(
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Placeholder for 200x200
-                Box(
-                    modifier = Modifier
-                        .size(200.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surfaceContainerHighest,
-                            RoundedCornerShape(20.dp)
-                        )
+                Icon(
+                    imageVector = if (state == LoginState.Suspended) Icons.Default.SettingsSuggest else Icons.Default.GppBad,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = color
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontSize = if (state == LoginState.Deleted) 28.sp else 45.sp,
-                    lineHeight = if (state == LoginState.Deleted) 36.sp else 52.sp,
+                    style = MaterialTheme.typography.headlineSmall,
                     textAlign = TextAlign.Center,
                     fontWeight = FontWeight.Bold,
                     color = if (state == LoginState.Suspended) MaterialTheme.colorScheme.onBackground else color
@@ -3668,6 +3898,7 @@ fun EditTunnelDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
     val context = LocalContext.current
@@ -3679,7 +3910,7 @@ fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
                         Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                         Spacer(Modifier.height(16.dp))
                         Text(stringResource(R.string.update_checking))
                     }
@@ -3699,7 +3930,7 @@ fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
                 onDismissRequest = { viewModel.dismiss() },
                 title = { Text(stringResource(R.string.update_available)) },
                 text = {
-                    Column {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         Text(stringResource(R.string.update_new_version, state.release.tagName))
                         state.release.body?.let {
                             Spacer(Modifier.height(8.dp))
@@ -3727,7 +3958,7 @@ fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
                         Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                         Spacer(Modifier.height(16.dp))
                         Text(stringResource(R.string.update_downloading))
                     }
@@ -3954,44 +4185,32 @@ fun InfoItem(label: String, value: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun CustomCircularIndicator(
+fun BarePullToRefreshIndicator(
     state: PullToRefreshState,
     isRefreshing: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    Box(
         modifier = modifier
-            .size(52.dp)
+            .size(48.dp)
             .graphicsLayer {
                 val showFraction = state.distanceFraction.coerceIn(0f, 1f)
                 alpha = showFraction
                 translationY = (showFraction - 1f) * 40.dp.toPx()
             },
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 6.dp
+        contentAlignment = Alignment.Center
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            if (isRefreshing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .graphicsLayer {
-                            rotationZ = state.distanceFraction * 180f
-                        },
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
+        if (isRefreshing) {
+            LoadingIndicator(
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            LoadingIndicator(
+                progress = { state.distanceFraction },
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

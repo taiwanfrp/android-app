@@ -146,4 +146,16 @@
     <string name="error_required">This field is required</string>
     <string name="error_selection_required">Please select an item</string>
     <string name="search_nodes">Search Nodes</string>
+
+    <string name="version_title">Version Info</string>
+    <string name="version_current">Current Version: %1$s</string>
+    <string name="version_update_content">What\'s new in this version</string>
+    <string name="version_no_update_content">No release notes provided</string>
+    <string name="version_latest_update_content">Latest release notes:\n\n</string>
+    <string name="version_fetch_failed">Failed to fetch release notes</string>
+
+    <string name="developer_info">Developer Info</string>
+    <string name="developer_app">TaiwanFRP APP Developer</string>
+    <string name="developer_backend">TaiwanFRP 2.0 Backend &amp; Frontend</string>
+    <string name="loading">Loading&#8230;</string>
 </resources>

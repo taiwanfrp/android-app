@@ -146,4 +146,14 @@
     <string name="error_required">此欄位為必填</string>
     <string name="error_selection_required">請選擇一個項目</string>
     <string name="search_nodes">搜尋節點</string>
+    <string name="version_title">版本資訊</string>
+    <string name="version_current">目前版本：%1$s</string>
+    <string name="version_update_content">此版本的更新內容</string>
+    <string name="version_no_update_content">沒有提供更新內容</string>
+    <string name="version_latest_update_content">最新版本更新內容：\n\n</string>
+    <string name="version_fetch_failed">無法取得更新內容</string>
+    <string name="developer_info">開發者資訊</string>
+    <string name="developer_app">TaiwanFRP APP開發者</string>
+    <string name="developer_backend">TaiwanFRP 2.0 前後端開發者</string>
+    <string name="loading">載入中&#8230;</string>
 </resources>
