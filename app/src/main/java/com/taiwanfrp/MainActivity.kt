@@ -17,6 +17,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -43,6 +45,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -115,6 +118,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,9 +129,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -153,6 +161,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -195,6 +204,7 @@ class SettingsViewModel(context: Context) : ViewModel() {
     private val REFRESH_INTERVAL_KEY = stringPreferencesKey("refresh_interval")
     private val SINGLE_EXPAND_KEY = stringPreferencesKey("single_expand")
     private val LANGUAGE_KEY = stringPreferencesKey("app_language")
+    private val AUTO_UPDATE_KEY = booleanPreferencesKey("auto_update")
     private val dataStore = context.applicationContext.dataStore
 
     val themeState = dataStore.data
@@ -223,6 +233,10 @@ class SettingsViewModel(context: Context) : ViewModel() {
         .map { it[SINGLE_EXPAND_KEY]?.toBoolean() ?: true }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val autoUpdate = dataStore.data
+        .map { it[AUTO_UPDATE_KEY] ?: true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     fun setTheme(theme: AppTheme) {
         viewModelScope.launch { dataStore.edit { it[THEME_KEY] = theme.name } }
     }
@@ -237,6 +251,10 @@ class SettingsViewModel(context: Context) : ViewModel() {
 
     fun setSingleExpandMode(enabled: Boolean) {
         viewModelScope.launch { dataStore.edit { it[SINGLE_EXPAND_KEY] = enabled.toString() } }
+    }
+
+    fun setAutoUpdate(enabled: Boolean) {
+        viewModelScope.launch { dataStore.edit { it[AUTO_UPDATE_KEY] = enabled } }
     }
 }
 
@@ -351,11 +369,11 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             "0.0.0"
         }
-        updateViewModel.checkUpdate(versionName ?: "0.0.0")
 
         setContent {
             val appTheme by settingsViewModel.themeState.collectAsState()
             val appLanguage by settingsViewModel.languageState.collectAsState()
+            val autoUpdate by settingsViewModel.autoUpdate.collectAsState()
             val updateState by updateViewModel.updateState.collectAsState()
             val focusManager = LocalFocusManager.current
             val keyboardController = LocalSoftwareKeyboardController.current
@@ -364,6 +382,12 @@ class MainActivity : ComponentActivity() {
                 AppTheme.Light, AppTheme.BlueLight, AppTheme.GreenLight, AppTheme.White -> false
                 AppTheme.Dark, AppTheme.Oled, AppTheme.Blue, AppTheme.Green -> true
                 AppTheme.System -> isSystemInDarkTheme()
+            }
+
+            LaunchedEffect(autoUpdate) {
+                if (autoUpdate) {
+                    updateViewModel.checkUpdate(versionName ?: "0.0.0")
+                }
             }
 
             LaunchedEffect(isForeground) {
@@ -402,7 +426,11 @@ class MainActivity : ComponentActivity() {
                         var isGuestMode by remember { mutableStateOf(false) }
                         var appState by remember { mutableStateOf(AppState.Init) }
 
-                        UpdateDialog(state = updateState, viewModel = updateViewModel)
+                        UpdateDialog(
+                            state = updateState,
+                            viewModel = updateViewModel,
+                            settingsViewModel = settingsViewModel
+                        )
 
                         Crossfade(targetState = appState, label = "AppStateTransition") { state ->
                             when (state) {
@@ -544,7 +572,8 @@ data class NodeResponse(
     @SerializedName("port_end") val portEnd: Int?,
     val status: String?,
     @SerializedName("is_public") val isPublic: Boolean?,
-    @SerializedName("owner_id") val ownerId: String? = null
+    @SerializedName("owner_id") val ownerId: String? = null,
+    @SerializedName("is_online") val isOnline: Boolean? = null
 )
 
 data class SystemStatusResponse(
@@ -635,6 +664,9 @@ interface TaiwanFrpApi {
 
     @GET("status")
     suspend fun getSystemStatus(): SystemStatusResponse
+
+    @POST("api/v1/users/me/become_node_provider")
+    suspend fun becomeNodeProvider(): retrofit2.Response<Unit>
 }
 
 interface GithubUpdateApi {
@@ -1129,6 +1161,9 @@ fun MainScreen(
                             user = user,
                             refreshInterval = refreshInterval,
                             singleExpandMode = singleExpandMode,
+                            isGuest = false,
+                            onBack = null,
+                            onRefreshUser = { authViewModel.checkAuth(force = true) },
                             language = appLanguage,
                             innerPadding = innerPadding
                         )
@@ -1447,6 +1482,7 @@ fun NodeScreen(
     singleExpandMode: Boolean = true,
     isGuest: Boolean = false,
     onBack: (() -> Unit)? = null,
+    onRefreshUser: (() -> Unit)? = null,
     language: AppLanguage = AppLanguage.Auto,
     innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
@@ -1568,6 +1604,7 @@ fun NodeScreen(
                     },
                     onDelete = { nodeToDelete = it },
                     onAddClick = { showCreateNodeDialog = true },
+                    onRefreshUser = onRefreshUser,
                     language = language,
                     innerPadding = padding
                 )
@@ -1609,11 +1646,60 @@ fun NodeContent(
     onToggle: (Int?) -> Unit,
     onDelete: (NodeResponse) -> Unit,
     onAddClick: () -> Unit,
+    onRefreshUser: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     language: AppLanguage = AppLanguage.Auto,
     innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     var searchQuery by remember { mutableStateOf("") }
+
+    var overscrollPx by remember { mutableFloatStateOf(0f) }
+    var showButton by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val thresholdPx = with(density) { 120.dp.toPx() }
+    val listState = rememberLazyListState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            showButton = false
+            overscrollPx = 0f
+        }
+    }
+
+    val connection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (!showButton &&
+                    source == NestedScrollSource.UserInput &&
+                    available.y < 0f &&
+                    !listState.canScrollForward
+                ) {
+                    overscrollPx += -available.y
+                    if (overscrollPx >= thresholdPx) showButton = true
+                }
+                return Offset.Zero
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0f) overscrollPx = 0f
+                return Offset.Zero
+            }
+        }
+    }
+
+    LaunchedEffect(showButton) {
+        if (showButton) {
+            val lastIndex = listState.layoutInfo.totalItemsCount - 1
+            if (lastIndex >= 0) {
+                listState.animateScrollToItem(lastIndex)
+            }
+        }
+    }
 
     Box(modifier.fillMaxSize()) {
         val context = LocalContext.current
@@ -1664,7 +1750,10 @@ fun NodeContent(
                                     it.host?.contains(searchQuery, ignoreCase = true) == true
                         }
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(connection),
                             contentPadding = PaddingValues(
                                 top = 4.dp,
                                 bottom = innerPadding.calculateBottomPadding() + 4.dp,
@@ -1716,6 +1805,80 @@ fun NodeContent(
                                     )
                                 }
                             }
+
+                            if (!isGuest && user?.permissions?.contains("node.create") != true) {
+                                item {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        AnimatedVisibility(
+                                            visible = showButton,
+                                            enter = fadeIn() + expandVertically()
+                                        ) {
+                                            val coroutineScope = rememberCoroutineScope()
+                                            var isApplying by remember { mutableStateOf(false) }
+
+                                            val failedStr =
+                                                stringResource(R.string.become_node_provider_failed)
+
+                                            Button(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        isApplying = true
+                                                        try {
+                                                            val response =
+                                                                RetrofitClient.mainApi.becomeNodeProvider()
+                                                            if (response.isSuccessful) {
+                                                                Toast.makeText(
+                                                                    context,
+                                                                    R.string.become_node_provider_success,
+                                                                    Toast.LENGTH_LONG
+                                                                ).show()
+                                                                onRefreshUser?.invoke()
+                                                            } else {
+                                                                Toast.makeText(
+                                                                    context,
+                                                                    failedStr.replace(
+                                                                        "%1\$s",
+                                                                        response.code().toString()
+                                                                    ),
+                                                                    Toast.LENGTH_SHORT
+                                                                ).show()
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                failedStr.replace(
+                                                                    "%1\$s",
+                                                                    e.message ?: "Unknown Error"
+                                                                ),
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        } finally {
+                                                            isApplying = false
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 32.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                                ),
+                                                enabled = !isApplying
+                                            ) {
+                                                if (isApplying) {
+                                                    androidx.compose.material3.CircularProgressIndicator(
+                                                        Modifier.size(24.dp),
+                                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                                    )
+                                                } else {
+                                                    Text(stringResource(R.string.become_node_provider))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1746,7 +1909,11 @@ fun NodeItem(
                 Icon(
                     Icons.Default.Dns,
                     null,
-                    tint = if (node.status == "active") Color(0xFF008000) else Color.Gray
+                    tint = when (node.isOnline) {
+                        true -> Color(0xFF008000)
+                        false -> Color.Red
+                        else -> Color.Gray
+                    }
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -1757,13 +1924,17 @@ fun NodeItem(
                     Text("${node.host}", style = MaterialTheme.typography.bodySmall)
                 }
                 Text(
-                    text = when (node.status) {
-                        "draft" -> stringResource(R.string.status_draft)
-                        "active" -> stringResource(R.string.status_active)
-                        else -> stringResource(R.string.status_inactive)
+                    text = when (node.isOnline) {
+                        true -> stringResource(R.string.status_online)
+                        false -> stringResource(R.string.status_offline)
+                        else -> stringResource(R.string.status_unknown)
                     },
                     fontWeight = FontWeight.Bold,
-                    color = if (node.status == "active") Color(0xFF008000) else Color.Red
+                    color = when (node.isOnline) {
+                        true -> Color(0xFF008000)
+                        false -> Color.Red
+                        else -> Color.Gray
+                    }
                 )
                 Spacer(Modifier.width(8.dp))
                 Icon(
@@ -1783,6 +1954,21 @@ fun NodeItem(
                         stringResource(R.string.id),
                         node.id?.toString() ?: "N/A",
                         copyMessage = stringResource(R.string.copied_id)
+                    )
+
+                    DetailRow(
+                        stringResource(R.string.status_operation),
+                        when (node.status) {
+                            "active" -> stringResource(R.string.status_available)
+                            "maintenance" -> stringResource(R.string.status_maintenance)
+                            else -> stringResource(R.string.status_disabled)
+                        },
+                        isCopyable = false,
+                        valueColor = when (node.status) {
+                            "active" -> Color(0xFF008000)
+                            "maintenance" -> Color(0xFF2196F3)
+                            else -> Color.Red
+                        }
                     )
 
                     if (false) { // 暫時隱藏但保留程式碼
@@ -2724,6 +2910,19 @@ fun OtherScreen(
             Switch(
                 checked = singleExpand,
                 onCheckedChange = { settingsViewModel.setSingleExpandMode(it) })
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        val autoUpdate by settingsViewModel.autoUpdate.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.auto_check_update),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Switch(
+                checked = autoUpdate,
+                onCheckedChange = { settingsViewModel.setAutoUpdate(it) })
         }
 
         val context = LocalContext.current
@@ -3900,7 +4099,11 @@ fun EditTunnelDialog(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
+fun UpdateDialog(
+    state: UpdateState,
+    viewModel: UpdateViewModel,
+    settingsViewModel: SettingsViewModel
+) {
     val context = LocalContext.current
     when (state) {
         UpdateState.Checking -> {
@@ -3926,32 +4129,91 @@ fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
         }
 
         is UpdateState.NewVersionAvailable -> {
+            var dontShowAgain by remember { mutableStateOf(false) }
+            val titleStr = stringResource(R.string.update_available)
+            val newVersionStr = stringResource(R.string.update_new_version, state.release.tagName)
+            val dontShowAgainStr = stringResource(R.string.dont_show_again)
+            val updateNowStr = stringResource(R.string.update_now)
+            val cancelStr = stringResource(R.string.cancel)
+
+            // Get release body or commit message
+            var releaseBody by remember { mutableStateOf(state.release.body) }
+            LaunchedEffect(state.release.tagName) {
+                if (releaseBody.isNullOrBlank()) {
+                    try {
+                        val tags = RetrofitClient.updateApi.getTags()
+                        val tag = tags.find { it.name == state.release.tagName }
+                        if (tag != null) {
+                            val commit = RetrofitClient.updateApi.getCommit(tag.commit.sha)
+                            releaseBody = commit.commit.message
+                        }
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
+                }
+            }
+
             AlertDialog(
                 onDismissRequest = { viewModel.dismiss() },
-                title = { Text(stringResource(R.string.update_available)) },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+                modifier = Modifier.width(312.dp),
+                shape = RoundedCornerShape(28.dp),
+                title = { Text(titleStr) },
                 text = {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        Text(stringResource(R.string.update_new_version, state.release.tagName))
-                        state.release.body?.let {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(newVersionStr)
+                        releaseBody?.let {
                             Spacer(Modifier.height(8.dp))
                             Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    dontShowAgain = !dontShowAgain
+                                    settingsViewModel.setAutoUpdate(!dontShowAgain)
+                                }
+                        ) {
+                            Checkbox(
+                                checked = dontShowAgain,
+                                onCheckedChange = {
+                                    dontShowAgain = it
+                                    settingsViewModel.setAutoUpdate(!it)
+                                }
+                            )
+                            Text(
+                                text = dontShowAgainStr,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { viewModel.downloadAndInstall(state.release) }) {
-                        Text(stringResource(R.string.update_now))
+                    TextButton(onClick = {
+                        viewModel.downloadAndInstall(state.release)
+                    }) {
+                        Text(updateNowStr)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { viewModel.dismiss() }) {
-                        Text(stringResource(R.string.cancel))
+                    TextButton(onClick = {
+                        viewModel.dismiss()
+                    }) {
+                        Text(cancelStr)
                     }
                 }
             )
         }
 
         UpdateState.Downloading -> {
+            val downloadingStr = stringResource(R.string.update_downloading)
             Dialog(onDismissRequest = {}) {
                 Card {
                     Column(
@@ -3960,20 +4222,24 @@ fun UpdateDialog(state: UpdateState, viewModel: UpdateViewModel) {
                     ) {
                         LoadingIndicator()
                         Spacer(Modifier.height(16.dp))
-                        Text(stringResource(R.string.update_downloading))
+                        Text(downloadingStr)
                     }
                 }
             }
         }
 
         is UpdateState.Error -> {
+            val errorPrefixStr = stringResource(R.string.error_prefix, state.message)
+            val confirmStr = stringResource(R.string.confirm)
+            val failedTitleStr = stringResource(R.string.error_unknown).replace("未知錯誤", "錯誤")
+                .replace("An unknown error occurred", "Error")
             AlertDialog(
                 onDismissRequest = { viewModel.dismiss() },
-                title = { Text(stringResource(R.string.update_failed)) },
-                text = { Text(state.message) },
+                title = { Text(failedTitleStr) },
+                text = { Text(errorPrefixStr) },
                 confirmButton = {
                     TextButton(onClick = { viewModel.dismiss() }) {
-                        Text(stringResource(R.string.confirm))
+                        Text(confirmStr)
                     }
                 }
             )

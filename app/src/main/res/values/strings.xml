@@ -146,6 +146,9 @@
     <string name="error_required">此欄位為必填</string>
     <string name="error_selection_required">請選擇一個項目</string>
     <string name="search_nodes">搜尋節點</string>
+    <string name="become_node_provider">申請成為節點提供者</string>
+    <string name="become_node_provider_success">申請成功！您現在可以建立節點了，請重新整理。</string>
+    <string name="become_node_provider_failed">申請失敗：%1$s</string>
     <string name="version_title">版本資訊</string>
     <string name="version_current">目前版本：%1$s</string>
     <string name="version_update_content">此版本的更新內容</string>
@@ -156,4 +159,13 @@
     <string name="developer_app">TaiwanFRP APP開發者</string>
     <string name="developer_backend">TaiwanFRP 2.0 前後端開發者</string>
     <string name="loading">載入中&#8230;</string>
+    <string name="status_available">可用</string>
+    <string name="status_maintenance">維護中</string>
+    <string name="status_disabled">停用</string>
+    <string name="status_operation">運營狀態</string>
+    <string name="status_online">上線</string>
+    <string name="status_offline">下線</string>
+    <string name="status_unknown">未知</string>
+    <string name="dont_show_again">不再自動顯示此通知</string>
+    <string name="auto_check_update">啟動時自動檢查更新</string>
 </resources>

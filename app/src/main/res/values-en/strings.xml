@@ -146,6 +146,9 @@
     <string name="error_required">This field is required</string>
     <string name="error_selection_required">Please select an item</string>
     <string name="search_nodes">Search Nodes</string>
+    <string name="become_node_provider">Become a Node Provider</string>
+    <string name="become_node_provider_success">Application successful! You can now create nodes. Please refresh.</string>
+    <string name="become_node_provider_failed">Application failed: %1$s</string>
 
     <string name="version_title">Version Info</string>
     <string name="version_current">Current Version: %1$s</string>
@@ -158,4 +161,13 @@
     <string name="developer_app">TaiwanFRP APP Developer</string>
     <string name="developer_backend">TaiwanFRP 2.0 Backend &amp; Frontend</string>
     <string name="loading">Loading&#8230;</string>
+    <string name="status_available">Available</string>
+    <string name="status_maintenance">Maintenance</string>
+    <string name="status_disabled">Disabled</string>
+    <string name="status_operation">Operation Status</string>
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_unknown">Unknown</string>
+    <string name="dont_show_again">Don\'t automatically show this again</string>
+    <string name="auto_check_update">Auto check for updates on startup</string>
 </resources>
